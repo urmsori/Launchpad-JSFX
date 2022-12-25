@@ -1,0 +1,96 @@
+desc:MIDI Launchpad
+//tags: MIDI processing
+
+slider1:108<0,255,1>Layout Start Pad Number
+slider2:111<0,255,1>Layout End Pad Number
+
+// these lines tell Reaper the effect has no audio input/output,
+// which enables processing optimizations.
+// MIDI-only FX should always have these lines.
+in_pin:none
+out_pin:none
+
+@slider
+pad_num_layout_start=slider1;
+pad_num_layout_end=slider2;
+
+@init
+function pad_send_sysex_set_led(pad_num, color) 
+(
+  // header
+  message[0]=0xF0; message[1]=0x00; message[2]=0x20; message[3]=0x29; message[4]=0x02; message[5]=0x18;
+  // type
+  message[6]=0x0a;
+  // pad_num
+  message[7]=pad_num;
+  // color
+  message[8]=color;
+  // end
+  message[9]=0xf7;
+  midisend_buf(0, message, 10);
+);
+
+function pad_send_sysex_set_all_leds_off() 
+(
+  // header
+  message[0]=0xF0; message[1]=0x00; message[2]=0x20; message[3]=0x29; message[4]=0x02; message[5]=0x18;
+  // type
+  message[6]=0x0e;
+  // color
+  message[7]=0;
+  // end
+  message[8]=0xf7;
+  midisend_buf(0, message, 9);
+);
+
+function pad_send_sysex_layout_selection(layout_num) 
+(
+  // header
+  message[0]=0xF0; message[1]=0x00; message[2]=0x20; message[3]=0x29; message[4]=0x02; message[5]=0x18;
+  // type
+  message[6]=0x22;
+  // layout_num
+  message[7]=layout_num;
+  // end
+  message[8]=0xf7;
+  midisend_buf(0, message, 9);
+);
+
+function pad_get_octaves(start end)
+(
+  i=0;
+  current=start;
+  ret[0]=0;
+  while(current<=end)
+  (
+    ret[i]=current;
+    current=current+12;
+    i=i+1;
+  );
+  current; 
+);
+
+function pad_set_note_led(note_num, color)
+(
+  midisend(0,0x90,note_num,color);
+);
+
+function pad_select_layout(pad_number, layout_start_pad_number)
+(
+  this.pad_send_sysex_layout_selection(pad_number - layout_start_pad_number);
+  this.pad_send_sysex_set_all_leds_off();
+  this.pad_send_sysex_set_led(pad_number, 63);
+  this.pad_set_note_led(55,63);
+);
+
+self.pad_select_layout(108, 108);
+
+@block
+while (midirecv(offset,msg1,pad_num,pad_value)) 
+(
+  // Layout
+  pad_value==127 && pad_num_layout_start<=pad_num && pad_num<=pad_num_layout_end ?
+  (
+    this.pad_select_layout(pad_num, pad_num_layout_start);
+  );
+);
