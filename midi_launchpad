@@ -1,9 +1,10 @@
 desc:MIDI Launchpad MK2
 //tags: MIDI processing
 
-slider1:0<0,3,1{Session, User1, User2, Mixser}> Default Layout
+slider1:1<0,3,1{Session, User1, User2, Mixser}> Default Layout
 slider2:1<1,16,1> Session Channel
 slider3:6<1,16,1> User1 Channel
+slider4:6<1,16,1> User2 Channel
 slider6:40<0,127,1> Layout colour
 slider7:3<0,127,1> Pressed Note colour
 slider8:51<0,127,1> Major Scale Note colour
@@ -160,29 +161,6 @@ function pad_drv_send_cc(channel, control_number, control_value) (
   midisend(0, PAD_DRV_MIDI_NOTE_CC + channel - 1, control_number, control_value);
 );
 
-//// Pad Button ////
-PAD_BUTTON_MEMOFFSET_COLOUR_ON_LIST = 0x100;
-PAD_BUTTON_MEMOFFSET_COLOUR_OFF_LIST = 0x200;
-
-function pad_button_get_colour_on(button_number) (
-  pad_button_colour_on_list[button_number + PAD_BUTTON_MEMOFFSET_COLOUR_ON_LIST];
-);
-function pad_button_get_colour_off(button_number) (
-  pad_button_colour_off_list[button_number + PAD_BUTTON_MEMOFFSET_COLOUR_OFF_LIST];
-);
-
-function pad_button_set_colour_on(button_number, colour) (
-  pad_button_colour_on_list[button_number + PAD_BUTTON_MEMOFFSET_COLOUR_ON_LIST] = colour;
-);
-function pad_button_set_colour_off(button_number, colour) (
-  pad_button_colour_off_list[button_number + PAD_BUTTON_MEMOFFSET_COLOUR_OFF_LIST] = colour;
-);
-
-function pad_button_init(button_number, colour_on, colour_off) (
-  pad_button_set_colour_on(button_number, colour_on);
-  pad_button_set_colour_off(button_number, colour_off);
-);
-
 //// Pad CC ////
 PAD_CC_UP = 104;
 PAD_CC_DOWN = 105;
@@ -217,20 +195,12 @@ function pad_cc_set_channel(cc_number, channel) (
 );
 
 function pad_cc_init(
-  arrow_colour,
-  layout_colour
-) (
-  cc_number = PAD_CC_ARROW_START;
-  loop(PAD_CC_LAYOUT_END - PAD_CC_ARROW_START + 1,
-    pad_cc_set_colour(cc_number, arrow_colour);
-    cc_number += 1;
-  );
-
-  cc_number = PAD_CC_LAYOUT_START;
-  loop(PAD_CC_LAYOUT_END - PAD_CC_LAYOUT_START + 1,
-    pad_cc_set_colour(cc_number, layout_colour);
-    cc_number += 1;
-  );
+  cc_number,
+  channel,
+  colour
+  ) (
+  pad_cc_set_colour(cc_number, colour);
+  pad_cc_set_channel(cc_number, channel);
 );
 
 function pad_cc_led_on(cc_number) local(colour, channel) (
@@ -245,20 +215,16 @@ function pad_cc_led_off(cc_number) local(channel) (
 );
 
 //// Pad Note ////
-PAD_NOTE_MEMOFFSET_BUTTON_NUMBERS = 0x1000;
-PAD_NOTE_MEMOFFSET_LED_CHANNELS = 0x1100;
-PAD_NOTE_MEMOFFSET_SOUND_CHANNELS = 0x1200;
+PAD_NOTE_MEMOFFSET_COLOUR_ONS = 0x1000;
+PAD_NOTE_MEMOFFSET_COLOUR_OFFS = 0x1100;
+PAD_NOTE_MEMOFFSET_LED_CHANNELS = 0x1200;
+PAD_NOTE_MEMOFFSET_SOUND_CHANNELS = 0x1300;
 
-function pad_note_get_button_number(note_number) (
-  pad_note_button_numbers[note_number + PAD_NOTE_MEMOFFSET_BUTTON_NUMBERS];
+function pad_note_get_colour_on(note_number) (
+  pad_note_colour_ons[note_number + PAD_NOTE_MEMOFFSET_COLOUR_ONS];
 );
-function pad_note_get_colour_on(note_number) local(button_number) (
-  button_number = pad_note_button_numbers[note_number + PAD_NOTE_MEMOFFSET_BUTTON_NUMBERS];
-  pad_button_get_colour_on(button_number);
-);
-function pad_note_get_colour_off(note_number) local(button_number) (
-  button_number = pad_note_button_numbers[note_number + PAD_NOTE_MEMOFFSET_BUTTON_NUMBERS];
-  pad_button_get_colour_off(button_number);
+function pad_note_get_colour_off(note_number) (
+  pad_note_colour_offs[note_number + PAD_NOTE_MEMOFFSET_COLOUR_OFFS];
 );
 function pad_note_get_led_channel(note_number) (
   pad_note_led_channels[note_number + PAD_NOTE_MEMOFFSET_LED_CHANNELS];
@@ -267,16 +233,11 @@ function pad_note_get_sound_channel(note_number) (
   pad_note_sound_channels[note_number + PAD_NOTE_MEMOFFSET_SOUND_CHANNELS];
 );
 
-function pad_note_set_button_number(note_number, button_number) (
-  pad_note_button_numbers[note_number + PAD_NOTE_MEMOFFSET_BUTTON_NUMBERS] = button_number;
+function pad_note_set_colour_on(note_number, colour_on) (
+  pad_note_colour_ons[note_number + PAD_NOTE_MEMOFFSET_COLOUR_ONS] = colour_on;
 );
-function pad_note_set_colour_on(note_number, colour_on) local(button_number) (
-  button_number = pad_note_get_button_number(note_number);
-  pad_button_set_colour_on(button_number, colour_on);
-);
-function pad_note_set_colour_off(note_number, colour_off) local(button_number) (
-  button_number = pad_note_get_button_number(note_number);
-  pad_button_set_colour_off(button_number, colour_off);
+function pad_note_set_colour_off(note_number, colour_off) (
+  pad_note_colour_offs[note_number + PAD_NOTE_MEMOFFSET_COLOUR_OFFS] = colour_off;
 );
 function pad_note_set_led_channel(note_number, led_channel) (
   pad_note_led_channels[note_number + PAD_NOTE_MEMOFFSET_LED_CHANNELS] = led_channel;
@@ -287,14 +248,13 @@ function pad_note_set_sound_channel(note_number, sound_channel) (
 
 function pad_note_init(
   note_number,
-  button_number,
   colour_on,
   colour_off,
   led_channel,
   sound_channel
   ) (
-  pad_note_set_button_number(note_number, button_number);
-  pad_button_init(button_number, colour_on, colour_off);
+  pad_note_set_colour_on(note_number, colour_on);
+  pad_note_set_colour_off(note_number, colour_off);
   pad_note_set_led_channel(note_number, led_channel);
   pad_note_set_sound_channel(note_number, sound_channel);
 );
@@ -344,7 +304,12 @@ function scale_get_octave(octave_index) (
 //// Pad Note Group ////
 PAD_NOTE_GROUP_MEMOFFSET_START_NOTE_NUMBERS = 0x3000;
 PAD_NOTE_GROUP_MEMOFFSET_END_NOTE_NUMBERS = 0x3100;
-PAD_NOTE_GROUP_MEMOFFSET_DO_NOTE_NUMBERS = 0x3200;
+PAD_NOTE_GROUP_MEMOFFSET_LED_CHANNELS = 0x3200;
+PAD_NOTE_GROUP_MEMOFFSET_SOUND_CHANNELS = 0x3300;
+PAD_NOTE_GROUP_MEMOFFSET_DO_NOTE_NUMBERS = 0x3400;
+PAD_NOTE_GROUP_MEMOFFSET_COLOUR_ONS = 0x3500;
+PAD_NOTE_GROUP_MEMOFFSET_COLOUR_OFF_DOS = 0x3600;
+PAD_NOTE_GROUP_MEMOFFSET_COLOUR_OFF_SCALES = 0x3700;
 
 function pad_note_group_get_start_note_number(note_group_number) (
   pad_note_group_start_note_numbers[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_START_NOTE_NUMBERS];
@@ -352,8 +317,23 @@ function pad_note_group_get_start_note_number(note_group_number) (
 function pad_note_group_get_end_note_number(note_group_number) (
   pad_note_group_end_note_numbers[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_END_NOTE_NUMBERS];
 );
+function pad_note_group_get_led_channel(note_group_number) (
+  pad_note_group_led_channels[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_LED_CHANNELS];
+);
+function pad_note_group_get_sound_channel(note_group_number) (
+  pad_note_group_sound_channels[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_SOUND_CHANNELS];
+);
 function pad_note_group_get_do_note_number(note_group_number) (
   pad_note_group_do_note_numbers[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_DO_NOTE_NUMBERS];
+);
+function pad_note_group_get_colour_on(note_group_number) (
+  pad_note_group_colour_ons[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_COLOUR_ONS];
+);
+function pad_note_group_get_colour_off_do(note_group_number) (
+  pad_note_group_colour_off_dos[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_COLOUR_OFF_DOS];
+);
+function pad_note_group_get_colour_off_scale(note_group_number) (
+  pad_note_group_colour_off_scales[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_COLOUR_OFF_SCALES];
 );
 
 function pad_note_group_set_start_note_number(note_group_number, note_number) (
@@ -362,71 +342,26 @@ function pad_note_group_set_start_note_number(note_group_number, note_number) (
 function pad_note_group_set_end_note_number(note_group_number, note_number) (
   pad_note_group_end_note_numbers[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_END_NOTE_NUMBERS] = note_number;
 );
+function pad_note_group_set_led_channel(note_group_number, note_number) (
+  pad_note_group_led_channels[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_LED_CHANNELS] = note_number;
+);
+function pad_note_group_set_sound_channel(note_group_number, note_number) (
+  pad_note_group_sound_channels[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_SOUND_CHANNELS] = note_number;
+);
 function pad_note_group_set_do_note_number(note_group_number, note_number) (
   pad_note_group_do_note_numbers[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_DO_NOTE_NUMBERS] = note_number;
 );
-
-function pad_note_group_set_led_channel(
-  note_group_number, led_channel
-  ) local(
-  start_note_number, end_note_number, i, note_number
-  ) (
-  start_note_number = pad_note_group_get_start_note_number(note_group_number);
-  end_note_number = pad_note_group_get_end_note_number(note_group_number);
-
-  note_number = start_note_number;
-  while(note_number <= end_note_number) (
-    pad_note_set_led_channel(note_number, led_channel);
-    note_number += 1;
-  );
+function pad_note_group_set_colour_on(note_group_number, note_number) (
+  pad_note_group_colour_ons[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_COLOUR_ONS] = note_number;
+);
+function pad_note_group_set_colour_off_do(note_group_number, note_number) (
+  pad_note_group_colour_off_dos[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_COLOUR_OFF_DOS] = note_number;
+);
+function pad_note_group_set_colour_off_scale(note_group_number, note_number) (
+  pad_note_group_colour_off_scales[note_group_number + PAD_NOTE_GROUP_MEMOFFSET_COLOUR_OFF_SCALES] = note_number;
 );
 
-function pad_note_group_set_sound_channel(
-  note_group_number, sound_channel
-  ) local(
-  start_note_number, end_note_number, i, note_number
-  ) (
-  start_note_number = pad_note_group_get_start_note_number(note_group_number);
-  end_note_number = pad_note_group_get_end_note_number(note_group_number);
-
-  note_number = start_note_number;
-  while(note_number <= end_note_number) (
-    pad_note_set_sound_channel(note_number, sound_channel);
-    note_number += 1;
-  );
-);
-
-function pad_note_group_set_colour_on(
-  note_group_number, colour
-  ) local(
-  start_note_number, end_note_number, i, note_number
-  ) (
-  start_note_number = pad_note_group_get_start_note_number(note_group_number);
-  end_note_number = pad_note_group_get_end_note_number(note_group_number);
-
-  note_number = start_note_number;
-  while(note_number <= end_note_number) (
-    pad_note_set_colour_on(note_number, colour);
-    note_number += 1;
-  );
-);
-
-function pad_note_group_set_colour_off(
-  note_group_number, colour
-  ) local(
-  start_note_number, end_note_number, i, note_number
-  ) (
-  start_note_number = pad_note_group_get_start_note_number(note_group_number);
-  end_note_number = pad_note_group_get_end_note_number(note_group_number);
-
-  note_number = start_note_number;
-  while(note_number <= end_note_number) (
-    pad_note_set_colour_off(note_number, colour);
-    note_number += 1;
-  );
-);
-
-function pad_note_group_set_colour_off_octaves(
+function pad_note_group_reset_colour_off_octaves(
   note_group_number, note_number, colour
   ) local(
   start_note_number, end_note_number, i, note_number, octave_count
@@ -443,25 +378,64 @@ function pad_note_group_set_colour_off_octaves(
   );
 );
 
-function pad_note_group_set_colour_off_majorscale(
+function pad_note_group_reset_colour_off_majorscale(
   note_group_number,
   do_note_colour,
   scale_note_colour
   ) local(do_note_number) (
   do_note_number = pad_note_group_get_do_note_number(note_group_number);
 
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number, do_note_colour);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 1, 0);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 2, scale_note_colour);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 3, 0);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 4, scale_note_colour);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 5, scale_note_colour);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 6, 0);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 7, scale_note_colour);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 8, 0);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 9, scale_note_colour);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 10, 0);
-  pad_note_group_set_colour_off_octaves(note_group_number, do_note_number + 11, scale_note_colour);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number, do_note_colour);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 1, 0);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 2, scale_note_colour);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 3, 0);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 4, scale_note_colour);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 5, scale_note_colour);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 6, 0);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 7, scale_note_colour);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 8, 0);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 9, scale_note_colour);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 10, 0);
+  pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 11, scale_note_colour);
+);
+
+function pad_note_group_reset(
+  note_group_number
+  ) local(
+  start_note_number, end_note_number, note_number, colour_off_do, colour_off_scale
+  ) (
+  start_note_number = pad_note_group_get_start_note_number(note_group_number);
+  end_note_number = pad_note_group_get_end_note_number(note_group_number);
+
+  colour_on = pad_note_group_get_colour_on(note_group_number);
+  led_channel = pad_note_group_get_led_channel(note_group_number);
+  sound_channel = pad_note_group_get_sound_channel(note_group_number);
+
+  note_number = start_note_number;
+  while(note_number <= end_note_number) (
+    pad_note_init(
+      note_number, // note_number
+      colour_on, // colour_on
+      0, // colour_off
+      led_channel, // led_channel
+      sound_channel // sound_channel
+    );
+    note_number += 1;
+  );
+
+  colour_off_do = pad_note_group_get_colour_off_do(note_group_number);
+  colour_off_scale = pad_note_group_get_colour_off_scale(note_group_number);
+  pad_note_group_reset_colour_off_majorscale(
+    note_group_number,
+    colour_off_do,
+    colour_off_scale
+  );
+
+  note_number = start_note_number;
+  while(note_number <= end_note_number) (
+    pad_note_led_off(note_number);
+    note_number += 1;
+  );
 );
 
 function pad_note_group_init(
@@ -471,50 +445,22 @@ function pad_note_group_init(
   led_channel,
   sound_channel,
   do_note_number,
-  note_on_colour,
-  do_note_off_colour,
-  scale_note_off_colour
-  ) local(
-  note_number
+  colour_on,
+  colour_off_do,
+  colour_off_scale
   ) (
   pad_note_group_set_start_note_number(note_group_number, start_note_number);
   pad_note_group_set_end_note_number(note_group_number, end_note_number);
-
-  note_number = start_note_number;
-  while(note_number <= end_note_number) (
-    pad_note_init(
-      note_number,
-      note_number,
-      note_on_colour,
-      colour_off,
-      led_channel,
-      sound_channel
-    );
-    note_number += 1;
-  );
-
+  pad_note_group_set_led_channel(note_group_number, led_channel);
+  pad_note_group_set_sound_channel(note_group_number, sound_channel);
   pad_note_group_set_do_note_number(note_group_number, do_note_number);
-  pad_note_group_set_colour_off_majorscale(
-    note_group_number,
-    do_note_off_colour,
-    scale_note_off_colour
-  );
+  pad_note_group_set_colour_on(note_group_number, colour_on);
+  pad_note_group_set_colour_off_do(note_group_number, colour_off_do);
+  pad_note_group_set_colour_off_scale(note_group_number, colour_off_scale);
+
+  pad_note_group_reset(note_number);
 );
 
-function pad_note_group_led_off(
-  note_group_number
-  ) local(
-  start_note_number, end_note_number, i, note_number
-  ) (
-  start_note_number = pad_note_group_get_start_note_number(note_group_number);
-  end_note_number = pad_note_group_get_end_note_number(note_group_number);
-
-  note_number = start_note_number;
-  while(note_number <= end_note_number) (
-    pad_note_led_off(note_number);
-    note_number += 1;
-  );
-);
 
 //// Pad Layout ////
 PAD_LAYOUT_NUMBER_SESSION = 0;
@@ -538,7 +484,7 @@ function pad_layout_get_note_group_count(layout_number) (
   pad_layout_note_group_counts[layout_number + PAD_LAYOUT_MEMOFFSET_NOTE_GROUP_COUNTS];
 );
 function pad_layout_get_note_group(layout_number, inner_index) (
-  pad_layout_note_groups[((layout_number * PAD_LAYOUT_NOTE_GROUP_COUNT_MAX) + inner_index) + PAD_LAYOUT_MEMOFFSET_NOTE_GROUP_COUNTS];
+  pad_layout_note_groups_list[((layout_number * PAD_LAYOUT_NOTE_GROUP_COUNT_MAX) + inner_index) + PAD_LAYOUT_MEMOFFSET_NOTE_GROUPS_LIST];
 );
 function pad_layout_get_channel(layout_number) local(cc_number) (
   cc_number = pad_layout_get_cc_number(layout_number);
@@ -555,7 +501,7 @@ function pad_layout_set_note_group_count(layout_number, note_group_count) (
   pad_layout_note_group_counts[layout_number + PAD_LAYOUT_MEMOFFSET_NOTE_GROUP_COUNTS] = note_group_count;
 );
 function pad_layout_set_note_group(layout_number, inner_index, note_group) (
-  pad_layout_note_groups[((layout_number * PAD_LAYOUT_NOTE_GROUP_COUNT_MAX) + inner_index) + PAD_LAYOUT_MEMOFFSET_NOTE_GROUP_COUNTS] = note_group;
+  pad_layout_note_groups_list[((layout_number * PAD_LAYOUT_NOTE_GROUP_COUNT_MAX) + inner_index) + PAD_LAYOUT_MEMOFFSET_NOTE_GROUPS_LIST] = note_group;
 );
 function pad_layout_set_channel(layout_number, channel) local(cc_number) (
   cc_number = pad_layout_get_cc_number(layout_number);
@@ -567,18 +513,17 @@ function pad_layout_init(
   drv_layout,
   cc_number,
   channel,
-  arrow_button_colour,
   layout_button_colour
   ) (
+  pad_cc_init(
+    cc_number,
+    channel,
+    layout_button_colour
+  );
+
   pad_layout_set_drv_layout(layout_number, drv_layout);
   pad_layout_set_cc_number(layout_number, cc_number);
   pad_layout_set_note_group_count(layout_number, 0);
-
-  pad_cc_init(
-    arrow_button_colour,
-    layout_button_colour
-  );
-  pad_cc_set_channel(cc_number, channel);
 );
 
 function pad_layout_add_note_group(layout_number, note_group) local(note_group_count) (
@@ -587,24 +532,19 @@ function pad_layout_add_note_group(layout_number, note_group) local(note_group_c
   pad_layout_set_note_group_count(layout_number, note_group_count + 1);
 );
 
-function pad_layout_select(layout_number) local(drv_layout, cc_number) (
+function pad_layout_select(layout_number) local(drv_layout, cc_number, note_group_count, note_group, i) (
   drv_layout = pad_layout_get_drv_layout(layout_number);
   pad_drv_send_sysex_layout_selection(drv_layout);
 
   pad_drv_send_sysex_set_all_leds(0);
   cc_number = pad_layout_get_cc_number(layout_number);
   pad_cc_led_on(cc_number);
-);
-
-function pad_layout_after_select(layout_number) local(note_group_count, note_group, i) (
-  channel = pad_layout_get_channel(layout_number);
 
   note_group_count = pad_layout_get_note_group_count(layout_number);
   i = 0;
   loop(note_group_count,
     note_group = pad_layout_get_note_group(layout_number, i);
-    pad_note_group_set_led_channel(note_group, channel);
-    pad_note_group_led_off(note_group);
+    pad_note_group_reset(note_group);
     i += 1;
   );
 );
@@ -617,6 +557,7 @@ g_is_first = 1;
 slider_default_layout = slider1;
 slider_channel_session = slider2;
 slider_channel_user1 = slider3;
+slider_channel_user2 = slider4;
 slider_colour_layout = slider6;
 slider_colour_pressed_note = slider7;
 slider_colour_majorscale_note = slider8;
@@ -642,7 +583,6 @@ g_is_first == 1 ? (
     PAD_DRV_LAYOUT_SESSION, // drv_layout
     PAD_CC_SESSION, // cc_number
     slider_channel_session, // channel
-    3, // arrow_button_colour
     126 // layout_button_colour
   );
   pad_layout_add_note_group(PAD_LAYOUT_NUMBER_SESSION, 0);
@@ -675,16 +615,48 @@ g_is_first == 1 ? (
     PAD_DRV_LAYOUT_USER1, // drv_layout
     PAD_CC_USER1, // cc_number
     slider_channel_user1, // channel
-    3, // arrow_button_colour
     126 // layout_button_colour
   );
   pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER1, 1);
   pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER1, 2);
 
-  pad_layout_select(slider_default_layout);
-  led_channel = pad_layout_get_channel(slider_default_layout);
-  pad_layout_after_select(slider_default_layout);
+  // User2 Note Group
+  pad_note_group_init(
+    3, // note_group_number
+    36, // start_note_number
+    67, // end_note_number
+    slider_channel_user2, // led_channel
+    9, // sound_channel
+    0, // do_note_number
+    slider_colour_pressed_note, // note_on_colour
+    slider_colour_do_note, // do_note_off_colour
+    slider_colour_majorscale_note // scale_note_off_colour
+  );
+  pad_note_group_init(
+    4, // note_group_number
+    68, // start_note_number
+    99, // end_note_number
+    slider_channel_user2, // led_channel
+    9, // sound_channel
+    0, // do_note_number
+    slider_colour_pressed_note, // note_on_colour
+    slider_colour_do_note, // do_note_off_colour
+    slider_colour_majorscale_note // scale_note_off_colour
+  );
+  pad_layout_init(
+    PAD_LAYOUT_NUMBER_USER2, // layout_number
+    PAD_DRV_LAYOUT_USER1, // drv_layout
+    PAD_CC_USER2, // cc_number
+    slider_channel_user2, // channel
+    126 // layout_button_colour
+  );
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER2, 3);
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER2, 4);
 
+  // Select Layout
+  pad_layout_select(slider_default_layout);
+
+  // End First Loop
   g_is_first = 0;
 );
 
@@ -716,8 +688,6 @@ while (midirecv(offset, midi_status, midi_num, midi_value)) (
       layout_number = midi_num - PAD_CC_LAYOUT_START;
       midi_value == 127 ? (
         pad_layout_select(layout_number);
-      ) : (
-        pad_layout_after_select(layout_number);
       );
     );
 
