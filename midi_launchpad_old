@@ -1,0 +1,323 @@
+desc:MIDI Launchpad MK2 OLD
+//tags: MIDI processing
+
+slider1:1<0,3,1{Session, User1, User2, Mixser}> Default Layout
+slider2:1<1,16,1> Session Channel
+slider3:6<1,16,1> User1 Channel
+slider4:14<1,16,1> User2 Channel
+slider5:1<1,16,1> Mixer Channel
+slider6:40<0,127,1> Layout Color
+slider7:3<0,127,1> Pressed Note Color
+slider8:51<0,127,1> Major Scale Note Color
+slider9:52<0,127,1> Do Note Color
+
+// these lines tell Reaper the effect has no audio input/output,
+// which enables processing optimizations.
+// MIDI-only FX should always have these lines.
+in_pin:none
+out_pin:none
+
+@init
+///////////////////// Constants /////////////////////////
+PAD_NUM_UP = 104;
+PAD_NUM_DOWN = 105;
+PAD_NUM_LEFT = 106;
+PAD_NUM_RIGHT = 107;
+PAD_NUM_LAYOUT_START = 108;
+PAD_NUM_LAYOUT_END = 111;
+
+PAD_NOTE_END = 99;
+
+MIDI_TYPE_NOTE_OFF = 0x80;
+MIDI_TYPE_NOTE_ON = 0x90;
+MIDI_TYPE_CC = 0xB0;
+
+///////////////// Global Variables ///////////////////
+g_pad_layout_current = 0;
+
+//////////////// Pad Send funtions //////////////////////
+function pad_send_sysex_set_led(pad_num, color) local(message) (
+  // header
+  message[0] = 0xF0; message[1] = 0x00; message[2] = 0x20; message[3] = 0x29; message[4] = 0x02; message[5] = 0x18;
+  // type
+  message[6] = 0x0a;
+  // pad_num
+  message[7] = pad_num;
+  // color
+  message[8] = color;
+  // end
+  message[9] = 0xf7;
+  midisend_buf(0, message, 10);
+);
+
+function pad_send_sysex_set_all_leds_off() local(message) (
+  // header
+  message[0] = 0xF0; message[1] = 0x00; message[2] = 0x20; message[3] = 0x29; message[4] = 0x02; message[5] = 0x18;
+  // type
+  message[6] = 0x0e;
+  // color
+  message[7] = 0;
+  // end
+  message[8] = 0xf7;
+  midisend_buf(0, message, 9);
+);
+
+function pad_send_sysex_layout_selection(layout) local(message) (
+  g_pad_layout_current=layout;
+
+  // header
+  message[0] = 0xF0; message[1] = 0x00; message[2] = 0x20; message[3] = 0x29; message[4] = 0x02; message[5] = 0x18;
+  // type
+  message[6] = 0x22;
+  // layout
+  message[7] = layout;
+  // end
+  message[8] = 0xf7;
+  midisend_buf(0, message, 9);
+);
+
+function pad_send_note_off(channel, note, color) (
+  midisend(0, 0x80 + channel - 1, note, color);
+);
+
+function pad_send_note_on(channel, note, color) (
+  midisend(0, 0x90 + channel - 1, note, color);
+);
+
+////////////// Note LED /////////////////////
+g_note_led_defaults[0]=0;
+function note_led_default_init_all() local(i) (
+  i = 0;
+  loop(PAD_NOTE_END,
+    g_note_led_defaults[i] = 0;
+    i += 1;
+  );
+);
+note_led_default_init_all();
+
+function note_led_set_default(channel, note, color) (
+  g_note_led_defaults[note] = color;
+  pad_send_note_on(channel, note, color);
+);
+
+function note_led_on(channel, note, color) (
+  pad_send_note_on(channel, note, color);
+);
+
+function note_led_off(channel,note) (
+  pad_send_note_on(channel, note, g_note_led_defaults[note]);
+);
+
+//////////////// Note LED Combinations /////////////////
+function note_led_set_default_octaves(channel, octave_base, color) local(current_note) (
+  current_note = octave_base;
+
+  while(current_note <= PAD_NOTE_END) (
+    note_led_set_default(channel, current_note, color);
+    current_note += 12;
+  );
+);
+
+g_note_do = 0;
+function note_led_set_default_majorscale(channel, color_do, color_scale) local() (
+  note_led_set_default_octaves(channel, g_note_do, color_do);
+  note_led_set_default_octaves(channel, g_note_do+1, 0);
+  note_led_set_default_octaves(channel, g_note_do+2, color_scale);
+  note_led_set_default_octaves(channel, g_note_do+3, 0);
+  note_led_set_default_octaves(channel, g_note_do+4, color_scale);
+  note_led_set_default_octaves(channel, g_note_do+5, color_scale);
+  note_led_set_default_octaves(channel, g_note_do+6, 0);
+  note_led_set_default_octaves(channel, g_note_do+7, color_scale);
+  note_led_set_default_octaves(channel, g_note_do+8, 0);
+  note_led_set_default_octaves(channel, g_note_do+9, color_scale);
+  note_led_set_default_octaves(channel, g_note_do+10, 0);
+  note_led_set_default_octaves(channel, g_note_do+11, color_scale);
+);
+
+//////////////// Sound /////////////////
+SOUND_CHANNEL_MIN = 9;
+SOUND_CHANNEL_MAX = 16;
+g_is_sound_channels[0] = 0;
+function sound_channel_init_all() local(i) (
+  i = 1;
+  loop(16,
+    g_is_sound_channels[i] = 0;
+    i += 1;
+  );
+
+  i = 9;
+  loop(1,
+    g_is_sound_channels[i] = 1;
+    i += 1;
+  );
+);
+sound_channel_init_all();
+
+function sound_channel_get_next(channel) local(current_channel) (
+  current_channel = channel;
+  while (
+    current_channel += 1;
+    g_is_sound_channels[current_channel] == 0 && current_channel < SOUND_CHANNEL_MAX;
+  );
+
+  current_channel > SOUND_CHANNEL_MAX ? (
+    -1;
+  ) : (
+    current_channel;
+  );
+);
+
+function sound_channel_get_begin(channel) (
+  sound_channel_get_next(SOUND_CHANNEL_MIN - 1);
+);
+
+function sound_on(channel, note) (  
+  pad_send_note_on(channel, note, 127);
+);
+
+function sound_off(channel, note) (  
+  pad_send_note_off(channel, note, 0);
+);
+
+////////////// Note ///////////////////////
+function note_on(channel, note, color) local(sound_channel) (
+  note_led_on(channel, note, color);
+
+  sound_channel = sound_channel_get_begin(channel);
+  while (sound_channel > 0) (
+    sound_on(sound_channel, note);
+
+    sound_channel = sound_channel_get_next(sound_channel);
+  );
+);
+
+function note_off(channel, note) local(sound_channel) (
+  note_led_off(channel, note);
+
+  sound_channel = sound_channel_get_begin(channel);
+  while (sound_channel > 0) (
+    sound_off(sound_channel, note);
+
+    sound_channel = sound_channel_get_next(sound_channel);
+  );
+);
+
+
+
+//////////////// All Combinations /////////////////
+function pad_select_layout(layout, color_layout) (
+  pad_send_sysex_layout_selection(layout);
+  pad_send_sysex_set_all_leds_off();
+  pad_send_sysex_set_led(layout + PAD_NUM_LAYOUT_START, slider_color_layout);
+);
+
+function pad_init_after_select_layout(channel, color_do, color_majorscale) (
+  note_led_set_default_majorscale(channel, color_do, color_majorscale);
+);
+
+////////// Is First /////////////////
+g_is_first = 1;
+
+////////////////////////////////////////////////////////////////
+@slider
+prev_color_do_note = slider_color_do_note;
+prev_color_majorscale_note = slider_color_majorscale_note;
+
+slider_default_layout = slider1;
+slider_channel_session = slider2;
+slider_channel_user1 = slider3;
+slider_channel_user2 = slider4;
+slider_channel_mixer = slider5;
+slider_color_layout = slider6;
+slider_color_pressed_note = slider7;
+slider_color_majorscale_note = slider8;
+slider_color_do_note = slider9;
+
+/////////////////////////////////////////////////////////////////
+@block
+g_is_first == 1 ? (
+  layout = slider_default_layout;
+
+  pad_select_layout(layout, slider_color_layout);
+  layout == 0 ? (
+    midi_channel = slider_channel_session;
+  );
+  layout == 1 ? (
+    midi_channel = slider_channel_user1;
+  );
+  layout == 2 ? (
+    midi_channel = slider_channel_user2;
+  );
+  layout == 3 ? (
+    midi_channel = slider_channel_mixer;
+  );
+  pad_init_after_select_layout(
+    midi_channel,
+    slider_color_do_note,
+    slider_color_majorscale_note
+  );
+
+  g_is_first=0;
+);
+
+while (midirecv(offset, midi_status, midi_num, midi_value)) (
+  midi_type = midi_status & 0xf0;
+  midi_channel = (midi_status & 0x0f) + 1;
+
+  // Note On
+  midi_type == MIDI_TYPE_NOTE_ON ? (
+    midi_value > 0 ?(
+      // Note On
+      note_on(midi_channel, midi_num, slider_color_pressed_note);
+    ):(
+      // Note Off
+      note_off(midi_channel, midi_num);
+    );
+  );
+
+  // Note Off
+  midi_type == MIDI_TYPE_NOTE_OFF ? (
+    note_off(midi_channel, midi_num);
+  );
+
+  // CC
+  midi_type == MIDI_TYPE_CC ? (
+    // Layout
+    PAD_NUM_LAYOUT_START <= midi_num &&
+    midi_num <= PAD_NUM_LAYOUT_END ? (
+      midi_value == 127 ? (
+        pad_select_layout(midi_num - PAD_NUM_LAYOUT_START, slider_color_layout);
+      ) : (
+        pad_init_after_select_layout(
+          midi_channel,
+          slider_color_do_note,
+          slider_color_majorscale_note
+        );
+      );
+    );
+
+    // Right & Left
+    midi_num == PAD_NUM_RIGHT ||
+    midi_num == PAD_NUM_LEFT ? (
+      midi_value == 127 ? (
+        // Right
+        midi_num == PAD_NUM_RIGHT &&
+        g_note_do < 11 ? (
+          g_note_do += 1;
+        );
+        // Left
+        midi_num == PAD_NUM_LEFT &&
+        g_note_do > 0 ? (
+          g_note_do -= 1;
+        );
+
+        note_led_set_default_majorscale(
+          midi_channel,
+          slider_color_do_note,
+          slider_color_majorscale_note
+        );
+      );
+    );
+  );
+
+);
