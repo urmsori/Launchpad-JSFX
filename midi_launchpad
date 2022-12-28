@@ -468,10 +468,33 @@ function pad_note_group_reset_colour_off_majorscale(
   pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number + 11, scale_note_colour);
 );
 
-function pad_note_group_reset(
+function pad_note_group_apply_colour(
   note_group_number
   ) local(
   start_note_number, end_note_number, note_number, colour_off_do, colour_off_scale
+  ) (
+  start_note_number = pad_note_group_get_start_note_number(note_group_number);
+  end_note_number = pad_note_group_get_end_note_number(note_group_number);
+
+  colour_off_do = pad_note_group_get_colour_off_do(note_group_number);
+  colour_off_scale = pad_note_group_get_colour_off_scale(note_group_number);
+  pad_note_group_reset_colour_off_majorscale(
+    note_group_number,
+    colour_off_do,
+    colour_off_scale
+  );
+
+  note_number = start_note_number;
+  while(note_number <= end_note_number) (
+    pad_note_led_off(note_number);
+    note_number += 1;
+  );
+);
+
+function pad_note_group_reset(
+  note_group_number
+  ) local(
+  start_note_number, end_note_number, note_number
   ) (
   start_note_number = pad_note_group_get_start_note_number(note_group_number);
   end_note_number = pad_note_group_get_end_note_number(note_group_number);
@@ -492,20 +515,7 @@ function pad_note_group_reset(
   );
 
   pad_note_group_apply_sound_channels(note_group_number);
-
-  colour_off_do = pad_note_group_get_colour_off_do(note_group_number);
-  colour_off_scale = pad_note_group_get_colour_off_scale(note_group_number);
-  pad_note_group_reset_colour_off_majorscale(
-    note_group_number,
-    colour_off_do,
-    colour_off_scale
-  );
-
-  note_number = start_note_number;
-  while(note_number <= end_note_number) (
-    pad_note_led_off(note_number);
-    note_number += 1;
-  );
+  pad_note_group_apply_colour(note_group_number);
 );
 
 function pad_note_group_init(
@@ -565,6 +575,22 @@ function pad_note_group_remove_sound_channel(note_group_number, sound_channel) l
   pad_note_group_set_sound_channel_count(note_group_number, inner_index);
 
   pad_note_group_apply_sound_channels(note_group_number);
+);
+
+function pad_note_group_change_do(note_group_number, amount) local(do_note) (
+  do_note = pad_note_group_get_do_note_number(note_group_number);
+  do_note += amount;
+  do_note >= 0 &&
+  do_note <= 11 ? (
+    pad_note_group_set_do_note_number(note_group_number, do_note);
+    pad_note_group_apply_colour(note_group_number);
+  );
+);
+function pad_note_group_increase_do(note_group_number) (
+  pad_note_group_change_do(note_group_number, 1);
+);
+function pad_note_group_decrease_do(note_group_number) (
+  pad_note_group_change_do(note_group_number, -1);
 );
 
 //// Pad Layout ////
@@ -637,7 +663,10 @@ function pad_layout_add_note_group(layout_number, note_group) local(note_group_c
   pad_layout_set_note_group_count(layout_number, note_group_count + 1);
 );
 
+g_pad_layout_number_current = 0;
 function pad_layout_select(layout_number) local(drv_layout, cc_number, note_group_count, note_group, i) (
+  g_pad_layout_number_current = layout_number;
+
   drv_layout = pad_layout_get_drv_layout(layout_number);
   pad_drv_send_sysex_layout_selection(drv_layout);
 
@@ -652,6 +681,27 @@ function pad_layout_select(layout_number) local(drv_layout, cc_number, note_grou
     pad_note_group_reset(note_group);
     i += 1;
   );
+);
+
+function pad_layout_get_current() (
+  g_pad_layout_number_current;
+);
+
+function pad_layout_change_do(layout_number, amount) local(note_group_count, i, note_group_number) (
+  note_group_count = pad_layout_get_note_group_count(layout_number);
+  i = 0;
+  loop(note_group_count,
+    note_group_number = pad_layout_get_note_group(layout_number, i);
+    pad_note_group_change_do(note_group_number, amount);
+
+    i += 1;
+  );
+);
+function pad_layout_increase_do(layout_number) (
+  pad_layout_change_do(layout_number, 1);
+);
+function pad_layout_decrease_do(layout_number) (
+  pad_layout_change_do(layout_number, -1);
 );
 
 //// Is First ////
@@ -704,7 +754,7 @@ g_is_first == 1 ? (
     slider_colour_do_note, // do_note_off_colour
     slider_colour_majorscale_note // scale_note_off_colour
   );
-  pad_note_group_add_sound_channel(1, 11);
+  pad_note_group_add_sound_channel(1, 9);
   pad_note_group_add_sound_channel(1, 13);
   pad_note_group_init(
     2, // note_group_number
@@ -716,7 +766,7 @@ g_is_first == 1 ? (
     slider_colour_do_note, // do_note_off_colour
     slider_colour_majorscale_note // scale_note_off_colour
   );
-  pad_note_group_add_sound_channel(2, 12);
+  pad_note_group_add_sound_channel(2, 9);
   pad_layout_init(
     PAD_LAYOUT_NUMBER_USER1, // layout_number
     PAD_DRV_LAYOUT_USER1, // drv_layout
@@ -805,6 +855,20 @@ while (midirecv(offset, midi_status, midi_num, midi_value)) (
       );
     );
 
+    // Right & Left
+    midi_num == PAD_CC_RIGHT ||
+    midi_num == PAD_CC_LEFT ? (
+      midi_value == 127 ? (
+        // Right
+        midi_num == PAD_CC_RIGHT ? (
+          pad_layout_increase_do(pad_layout_get_current());
+        );
+        // Left
+        midi_num == PAD_CC_LEFT ? (
+          pad_layout_decrease_do(pad_layout_get_current());
+        );
+      );
+    );
   );
 
 
