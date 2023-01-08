@@ -1,14 +1,37 @@
 desc:MIDI Launchpad MK2
 //tags: MIDI processing
 
-slider1:1<0,3,1{Session, User1, User2, Mixser}> Default Layout
-slider2:1<1,16,1> Session Channel
-slider3:6<1,16,1> User1 Channel
-slider4:6<1,16,1> User2 Channel
-slider6:40<0,127,1> Layout colour
-slider7:3<0,127,1> Pressed Note colour
-slider8:51<0,127,1> Major Scale Note colour
-slider9:52<0,127,1> Do Note colour
+slider1:1<0,3,1{Session, User1, User2, Mixer}> Default Layout
+// Channels
+slider2:1<1,16,1> Session LED Channel
+slider3:6<1,16,1> User1 LED Channel
+slider4:6<1,16,1> User2 LED Channel
+slider5:6<1,16,1> Mixer LED Channel
+// CC Colours
+slider6:40<0,127,1> Layout Colour
+slider7:40<0,127,1> Arrow Button Colour
+// Note Group1 Setting
+slider8:36<0,255,1> Note Group1 Start Note
+slider9:67<0,255,1> Note Group1 End Note
+slider10:0<1,16,1> Note Group1 LED Channel
+slider11:0<0,11,1{C, C#, D, D#, E, F, F#, G, G#, A, A#, B}> Note Group1 Do Note
+slider12:3<0,127,1> Note Group1 Pressed Note Colour
+slider13:52<0,127,1> Note Group1 Do Note Colour
+slider14:51<0,127,1> Note Group1 Major Scale Note Colour
+slider15:9<0,16,1> Note Group1 Sound Channel1
+slider16:10<0,16,1> Note Group1 Sound Channel2
+slider17:0<0,16,1> Note Group1 Sound Channel3
+// Note Group2 Setting
+slider18:68<0,255,1> Note Group2 Start Note
+slider19:99<0,255,1> Note Group2 End Note
+slider20:0<1,16,1> Note Group2 LED Channel
+slider21:0<0,11,1{C, C#, D, D#, E, F, F#, G, G#, A, A#, B}> Note Group2 Do Note
+slider22:3<0,127,1> Note Group2 Pressed Note Colour
+slider23:52<0,127,1> Note Group2 Do Note Colour
+slider24:51<0,127,1> Note Group2 Major Scale Note Colour
+slider25:9<0,16,1> Note Group2 Sound Channel1
+slider26:10<0,16,1> Note Group2 Sound Channel2
+slider27:0<0,16,1> Note Group2 Sound Channel3
 
 // these lines tell Reaper the effect has no audio input/output,
 // which enables processing optimizations.
@@ -448,10 +471,10 @@ function pad_note_group_reset_colour_off_octaves(
 );
 
 function pad_note_group_reset_colour_off_majorscale(
-  note_group_number,
-  do_note_colour,
-  scale_note_colour
-  ) local(do_note_number) (
+  note_group_number
+  ) local(do_note_number, do_note_colour, scale_note_colour) (
+  do_note_colour = pad_note_group_get_colour_off_do(note_group_number);
+  scale_note_colour = pad_note_group_get_colour_off_scale(note_group_number);
   do_note_number = pad_note_group_get_do_note_number(note_group_number);
 
   pad_note_group_reset_colour_off_octaves(note_group_number, do_note_number, do_note_colour);
@@ -471,18 +494,12 @@ function pad_note_group_reset_colour_off_majorscale(
 function pad_note_group_apply_colour(
   note_group_number
   ) local(
-  start_note_number, end_note_number, note_number, colour_off_do, colour_off_scale
+  start_note_number, end_note_number, note_number,
   ) (
   start_note_number = pad_note_group_get_start_note_number(note_group_number);
   end_note_number = pad_note_group_get_end_note_number(note_group_number);
 
-  colour_off_do = pad_note_group_get_colour_off_do(note_group_number);
-  colour_off_scale = pad_note_group_get_colour_off_scale(note_group_number);
-  pad_note_group_reset_colour_off_majorscale(
-    note_group_number,
-    colour_off_do,
-    colour_off_scale
-  );
+  pad_note_group_reset_colour_off_majorscale(note_group_number);
 
   note_number = start_note_number;
   while(note_number <= end_note_number) (
@@ -492,7 +509,7 @@ function pad_note_group_apply_colour(
 );
 
 function pad_note_group_reset(
-  note_group_number
+  note_group_number, generic_channel
   ) local(
   start_note_number, end_note_number, note_number
   ) (
@@ -501,6 +518,10 @@ function pad_note_group_reset(
 
   colour_on = pad_note_group_get_colour_on(note_group_number);
   led_channel = pad_note_group_get_led_channel(note_group_number);
+  led_channel == 0 ? (
+    pad_note_group_set_led_channel(note_group_number, generic_channel);
+    led_channel = generic_channel;
+  );
 
   note_number = start_note_number;
   while(note_number <= end_note_number) (
@@ -537,7 +558,7 @@ function pad_note_group_init(
   pad_note_group_set_colour_off_do(note_group_number, colour_off_do);
   pad_note_group_set_colour_off_scale(note_group_number, colour_off_scale);
 
-  pad_note_group_reset(note_number);
+  pad_note_group_reset(note_number, 1);
 );
 
 function pad_note_group_add_sound_channel(note_group_number, sound_channel) local(sound_channel_count, inner_index, sound_channel_current) (
@@ -664,7 +685,16 @@ function pad_layout_add_note_group(layout_number, note_group) local(note_group_c
 );
 
 g_pad_layout_number_current = 0;
-function pad_layout_select(layout_number) local(drv_layout, cc_number, note_group_count, note_group, i) (
+function pad_layout_select(
+  layout_number
+  ) local(
+  drv_layout,
+  cc_number,
+  note_group_count,
+  note_group,
+  i,
+  layout_channel
+  ) (
   g_pad_layout_number_current = layout_number;
 
   drv_layout = pad_layout_get_drv_layout(layout_number);
@@ -674,11 +704,12 @@ function pad_layout_select(layout_number) local(drv_layout, cc_number, note_grou
   cc_number = pad_layout_get_cc_number(layout_number);
   pad_cc_led_on(cc_number);
 
+  layout_channel = pad_layout_get_channel(layout_number);
   note_group_count = pad_layout_get_note_group_count(layout_number);
   i = 0;
   loop(note_group_count,
     note_group = pad_layout_get_note_group(layout_number, i);
-    pad_note_group_reset(note_group);
+    pad_note_group_reset(note_group, layout_channel);
     i += 1;
   );
 );
@@ -704,115 +735,236 @@ function pad_layout_decrease_do(layout_number) (
   pad_layout_change_do(layout_number, -1);
 );
 
+//// Mixer ////
+PAD_MIXER_SOUND_CHANNEL_MIN = 9;
+
+function pad_mixer_get_pad_number_for_sound_channel(
+  view_note_group_number,
+  sound_channel
+  ) local(
+  end_note_number,
+  channel1_note_number,
+  row,
+  column,
+  note_number
+  )(
+  end_note_number = pad_note_group_get_end_note_number(view_note_group_number);
+  channel1_note_number = end_note_number - 3;
+
+  row = ((sound_channel - PAD_MIXER_SOUND_CHANNEL_MIN) / 4);
+  column = ((sound_channel - PAD_MIXER_SOUND_CHANNEL_MIN) % 4);
+  
+  note_number = channel1_note_number + column - (row * 4);
+  note_number;
+);
+
+function pad_mixer_show_sound_channels(
+  view_note_group_number,
+  sound_note_group_number
+  ) local(
+  sound_channel_count,
+  i,
+  sound_channel,
+  note_number
+  )(
+  sound_channel_count = pad_note_group_get_sound_channel_count(sound_note_group_number);
+  i = 0;
+  asdf = sound_channel_count;
+  loop(sound_channel_count,
+    sound_channel = pad_note_group_get_sound_channel(
+      sound_note_group_number,
+      i
+    );
+    note_number = pad_mixer_get_pad_number_for_sound_channel(
+      view_note_group_number,
+      sound_channel
+    );
+    pad_note_led_on(note_number);
+  );
+);
+
+function pad_mixer_init(
+  channel,
+  layout_button_colour
+  ) (
+  // Note Groups
+  pad_note_group_init(
+    10, // note_group_number
+    36, // start_note_number
+    59, // end_note_number
+    slider_mixer_led_channel, // led_channel
+    0, // do_note_number
+    3, // note_on_colour
+    0, // do_note_off_colour
+    0 // scale_note_off_colour
+  );
+  pad_note_group_init(
+    11, // note_group_number
+    60, // start_note_number
+    67, // end_note_number
+    slider_mixer_led_channel, // led_channel
+    0, // do_note_number
+    3, // note_on_colour
+    0, // do_note_off_colour
+    0 // scale_note_off_colour
+  );
+  pad_note_group_init(
+    12, // note_group_number
+    68, // start_note_number
+    91, // end_note_number
+    slider_mixer_led_channel, // led_channel
+    0, // do_note_number
+    3, // note_on_colour
+    0, // do_note_off_colour
+    0 // scale_note_off_colour
+  );
+  pad_note_group_init(
+    13, // note_group_number
+    92, // start_note_number
+    99, // end_note_number
+    slider_mixer_led_channel, // led_channel
+    0, // do_note_number
+    3, // note_on_colour
+    0, // do_note_off_colour
+    0 // scale_note_off_colour
+  );
+
+  pad_layout_init(
+    PAD_LAYOUT_NUMBER_MIXER,
+    PAD_DRV_LAYOUT_USER1,
+    PAD_CC_MIXER,
+    channel,
+    layout_button_colour
+  );  
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_MIXER, 10);
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_MIXER, 11);
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_MIXER, 12);
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_MIXER, 13);
+
+  pad_mixer_show_sound_channels(11, 1);
+  pad_mixer_show_sound_channels(13, 2);
+);
+
 //// Is First ////
 g_is_first = 1;
 
 //////////////////////// @slider //////////////////////////////
 @slider
 slider_default_layout = slider1;
-slider_channel_session = slider2;
-slider_channel_user1 = slider3;
-slider_channel_user2 = slider4;
-slider_colour_layout = slider6;
-slider_colour_pressed_note = slider7;
-slider_colour_majorscale_note = slider8;
-slider_colour_do_note = slider9;
+// Channels
+slider_session_led_channel = slider2;
+slider_user1_led_channel = slider3;
+slider_user2_led_channel = slider4;
+slider_mixer_led_channel = slider5;
+// CC Colours
+slider_layout_colour = slider6;
+slider_arrow_button_colour = slider7;
+// Note Group1 Setting
+slider_note_group1_start_note = slider8;
+slider_note_group1_end_note = slider9;
+slider_note_group1_led_channel = slider10;
+slider_note_group1_do_note = slider11;
+slider_note_group1_pressed_note_colour = slider12;
+slider_note_group1_do_note_colour = slider13;
+slider_group1_major_scale_note_colour = slider14;
+slider_note_group1_sound_channel1 = slider15;
+slider_note_group1_sound_channel2 = slider16;
+slider_note_group1_sound_channel3 = slider17;
+// Note Group2 Setting
+slider_note_group2_start_note = slider18;
+slider_note_group2_end_note = slider19;
+slider_note_group2_led_channel = slider20;
+slider_note_group2_do_note = slider21;
+slider_note_group2_pressed_note_colour = slider22;
+slider_note_group2_do_note_colour = slider23;
+slider_group2_major_scale_note_colour = slider24;
+slider_note_group2_sound_channel1 = slider25;
+slider_note_group2_sound_channel2 = slider26;
+slider_note_group2_sound_channel3 = slider27;
 
 //////////////////////// @block //////////////////////////////
 @block
 g_is_first == 1 ? (
-  // Session Note Group
-  pad_note_group_init(
-    0, // note_group_number
-    11, // start_note_number
-    89, // end_note_number
-    slider_channel_session, // led_channel
-    0, // do_note_number
-    slider_colour_pressed_note, // note_on_colour
-    slider_colour_do_note, // do_note_off_colour
-    slider_colour_majorscale_note // scale_note_off_colour
-  );
-  pad_note_group_add_sound_channel(0, 9);
-  pad_note_group_add_sound_channel(0, 10);
-  pad_layout_init(
-    PAD_LAYOUT_NUMBER_SESSION, // layout_number
-    PAD_DRV_LAYOUT_SESSION, // drv_layout
-    PAD_CC_SESSION, // cc_number
-    slider_channel_session, // channel
-    126 // layout_button_colour
-  );
-  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_SESSION, 0);
-
-  // User1 Note Group
+  // Note Group1
   pad_note_group_init(
     1, // note_group_number
-    36, // start_note_number
-    67, // end_note_number
-    slider_channel_user1, // led_channel
-    0, // do_note_number
-    slider_colour_pressed_note, // note_on_colour
-    slider_colour_do_note, // do_note_off_colour
-    slider_colour_majorscale_note // scale_note_off_colour
+    slider_note_group1_start_note, // start_note_number
+    slider_note_group1_end_note, // end_note_number
+    slider_note_group1_led_channel, // led_channel
+    slider_note_group1_do_note, // do_note_number
+    slider_note_group1_pressed_note_colour, // note_on_colour
+    slider_note_group1_do_note_colour, // do_note_off_colour
+    slider_group1_major_scale_note_colour // scale_note_off_colour
   );
-  pad_note_group_add_sound_channel(1, 9);
-  pad_note_group_add_sound_channel(1, 13);
+  slider_note_group1_sound_channel1 > 0 ? (
+    pad_note_group_add_sound_channel(0, slider_note_group1_sound_channel1);
+  );
+  slider_note_group1_sound_channel2 > 0 ? (
+    pad_note_group_add_sound_channel(0, slider_note_group1_sound_channel2);
+  );
+  slider_note_group1_sound_channel2 > 0 ? (
+    pad_note_group_add_sound_channel(0, slider_note_group1_sound_channel2);
+  );
+
+  // Note Group2
   pad_note_group_init(
     2, // note_group_number
-    68, // start_note_number
-    99, // end_note_number
-    slider_channel_user1, // led_channel
-    0, // do_note_number
-    slider_colour_pressed_note, // note_on_colour
-    slider_colour_do_note, // do_note_off_colour
-    slider_colour_majorscale_note // scale_note_off_colour
+    slider_note_group2_start_note, // start_note_number
+    slider_note_group2_end_note, // end_note_number
+    slider_note_group2_led_channel, // led_channel
+    slider_note_group2_do_note, // do_note_number
+    slider_note_group2_pressed_note_colour, // note_on_colour
+    slider_note_group2_do_note_colour, // do_note_off_colour
+    slider_group2_major_scale_note_colour // scale_note_off_colour
   );
-  pad_note_group_add_sound_channel(2, 9);
+  slider_note_group2_sound_channel1 > 0 ? (
+    pad_note_group_add_sound_channel(0, slider_note_group2_sound_channel1);
+  );
+  slider_note_group2_sound_channel2 > 0 ? (
+    pad_note_group_add_sound_channel(0, slider_note_group2_sound_channel2);
+  );
+  slider_note_group2_sound_channel2 > 0 ? (
+    pad_note_group_add_sound_channel(0, slider_note_group2_sound_channel2);
+  );
+
+  // Layout Session
+  pad_layout_init(
+    PAD_LAYOUT_NUMBER_SESSION, // layout_number
+    PAD_DRV_LAYOUT_USER1, // drv_layout
+    PAD_CC_SESSION, // cc_number
+    slider_session_led_channel, // channel
+    slider_layout_colour // layout_button_colour
+  );
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_SESSION, 1);
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_SESSION, 2);
+
+  // Layout User1
   pad_layout_init(
     PAD_LAYOUT_NUMBER_USER1, // layout_number
     PAD_DRV_LAYOUT_USER1, // drv_layout
     PAD_CC_USER1, // cc_number
-    slider_channel_user1, // channel
-    126 // layout_button_colour
+    slider_user1_led_channel, // channel
+    slider_layout_colour // layout_button_colour
   );
   pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER1, 1);
   pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER1, 2);
 
-  // User2 Note Group
-  pad_note_group_init(
-    3, // note_group_number
-    36, // start_note_number
-    67, // end_note_number
-    slider_channel_user2, // led_channel
-    0, // do_note_number
-    slider_colour_pressed_note, // note_on_colour
-    slider_colour_do_note, // do_note_off_colour
-    slider_colour_majorscale_note // scale_note_off_colour
-  );
-  pad_note_group_add_sound_channel(3, 15);
-  pad_note_group_add_sound_channel(3, 14);
-  pad_note_group_add_sound_channel(3, 13);
-  pad_note_group_init(
-    4, // note_group_number
-    68, // start_note_number
-    99, // end_note_number
-    slider_channel_user2, // led_channel
-    0, // do_note_number
-    slider_colour_pressed_note, // note_on_colour
-    slider_colour_do_note, // do_note_off_colour
-    slider_colour_majorscale_note // scale_note_off_colour
-  );
-  pad_note_group_add_sound_channel(4, 13);
-  pad_note_group_add_sound_channel(4, 14);
-  pad_note_group_add_sound_channel(4, 15);
+  // Layout User2
   pad_layout_init(
     PAD_LAYOUT_NUMBER_USER2, // layout_number
     PAD_DRV_LAYOUT_USER1, // drv_layout
     PAD_CC_USER2, // cc_number
-    slider_channel_user2, // channel
-    126 // layout_button_colour
+    slider_user2_led_channel, // channel
+    slider_layout_colour // layout_button_colour
   );
-  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER2, 3);
-  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER2, 4);
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER2, 1);
+  pad_layout_add_note_group(PAD_LAYOUT_NUMBER_USER2, 2);
+
+  // Mixer Setting
+  pad_mixer_init(
+    slider_mixer_led_channel, // channel
+    slider_layout_colour // layout_button_colour
+  );
 
   // Select Layout
   pad_layout_select(slider_default_layout);
